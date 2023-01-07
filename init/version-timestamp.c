@@ -8,6 +8,7 @@
 #include <linux/uts.h>
 #include <linux/utsname.h>
 
+
 struct uts_namespace init_uts_ns = {
 	.ns.count = REFCOUNT_INIT(2),
 	.name = {
@@ -24,6 +25,7 @@ struct uts_namespace init_uts_ns = {
 	.ns.ops = &utsns_operations,
 #endif
 };
+
 
 /* FIXED STRINGS! Don't touch! */
 const char linux_banner[] =

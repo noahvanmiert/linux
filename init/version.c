@@ -17,6 +17,7 @@
 #include <linux/utsname.h>
 #include <linux/proc_ns.h>
 
+
 static int __init early_hostname(char *arg)
 {
 	size_t bufsize = sizeof(init_uts_ns.name.nodename);
@@ -24,13 +25,16 @@ static int __init early_hostname(char *arg)
 	size_t arglen;
 
 	arglen = strlcpy(init_uts_ns.name.nodename, arg, bufsize);
+
 	if (arglen > maxlen) {
 		pr_warn("hostname parameter exceeds %zd characters and will be truncated",
 			maxlen);
 	}
+
 	return 0;
 }
 early_param("hostname", early_hostname);
+
 
 const char linux_proc_banner[] =
 	"%s version %s"
@@ -40,11 +44,12 @@ const char linux_proc_banner[] =
 BUILD_SALT;
 BUILD_LTO_INFO;
 
+
 /*
  * init_uts_ns and linux_banner contain the build version and timestamp,
  * which are really fixed at the very last step of build process.
  * They are compiled with __weak first, and without __weak later.
- */
+*/
 
 struct uts_namespace init_uts_ns __weak;
 const char linux_banner[] __weak;
