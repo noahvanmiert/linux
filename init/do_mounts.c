@@ -27,12 +27,14 @@
 
 #include "do_mounts.h"
 
+
 int root_mountflags = MS_RDONLY | MS_SILENT;
 static char * __initdata root_device_name;
 static char __initdata saved_root_name[64];
 static int root_wait;
 
 dev_t ROOT_DEV;
+
 
 static int __init load_ramdisk(char *str)
 {
@@ -41,18 +43,22 @@ static int __init load_ramdisk(char *str)
 }
 __setup("load_ramdisk=", load_ramdisk);
 
+
 static int __init readonly(char *str)
 {
 	if (*str)
 		return 0;
+
 	root_mountflags |= MS_RDONLY;
 	return 1;
 }
+
 
 static int __init readwrite(char *str)
 {
 	if (*str)
 		return 0;
+
 	root_mountflags &= ~MS_RDONLY;
 	return 1;
 }
@@ -60,19 +66,21 @@ static int __init readwrite(char *str)
 __setup("ro", readonly);
 __setup("rw", readwrite);
 
+
 #ifdef CONFIG_BLOCK
 struct uuidcmp {
 	const char *uuid;
 	int len;
 };
 
-/**
+
+/*
  * match_dev_by_uuid - callback for finding a partition using its uuid
  * @dev:	device passed in by the caller
  * @data:	opaque pointer to the desired struct uuidcmp to match
  *
  * Returns 1 if the device matches, and 0 otherwise.
- */
+*/
 static int match_dev_by_uuid(struct device *dev, const void *data)
 {
 	struct block_device *bdev = dev_to_bdev(dev);
@@ -81,10 +89,12 @@ static int match_dev_by_uuid(struct device *dev, const void *data)
 	if (!bdev->bd_meta_info ||
 	    strncasecmp(cmp->uuid, bdev->bd_meta_info->uuid, cmp->len))
 		return 0;
+
 	return 1;
 }
 
-/**
+
+/*
  * devt_from_partuuid - looks up the dev_t of a partition by its UUID
  * @uuid_str:	char array containing ascii UUID
  *
@@ -96,7 +106,7 @@ static int match_dev_by_uuid(struct device *dev, const void *data)
  * extracted and used as an offset from the partition identified by the UUID.
  *
  * Returns the matching dev_t on success or 0 on failure.
- */
+*/
 static dev_t devt_from_partuuid(const char *uuid_str)
 {
 	struct uuidcmp cmp;
@@ -115,6 +125,7 @@ static dev_t devt_from_partuuid(const char *uuid_str)
 		/* Explicitly fail on poor PARTUUID syntax. */
 		if (sscanf(slash + 1, "PARTNROFF=%d%c", &offset, &c) != 1)
 			goto clear_root_wait;
+
 		cmp.len = slash - uuid_str;
 	} else {
 		cmp.len = strlen(uuid_str);
@@ -124,6 +135,7 @@ static dev_t devt_from_partuuid(const char *uuid_str)
 		goto clear_root_wait;
 
 	dev = class_find_device(&block_class, NULL, &cmp, &match_dev_by_uuid);
+
 	if (!dev)
 		return 0;
 
@@ -131,7 +143,7 @@ static dev_t devt_from_partuuid(const char *uuid_str)
 		/*
 		 * Attempt to find the requested partition by adding an offset
 		 * to the partition number found by UUID.
-		 */
+		*/
 		devt = part_devt(dev_to_disk(dev),
 				 dev_to_bdev(dev)->bd_partno + offset);
 	} else {
@@ -144,19 +156,22 @@ static dev_t devt_from_partuuid(const char *uuid_str)
 clear_root_wait:
 	pr_err("VFS: PARTUUID= is invalid.\n"
 	       "Expected PARTUUID=<valid-uuid-id>[/PARTNROFF=%%d]\n");
+
 	if (root_wait)
 		pr_err("Disabling rootwait; root= is invalid.\n");
+
 	root_wait = 0;
 	return 0;
 }
 
-/**
+
+/*
  * match_dev_by_label - callback for finding a partition using its label
  * @dev:	device passed in by the caller
  * @data:	opaque pointer to the label to match
  *
  * Returns 1 if the device matches, and 0 otherwise.
- */
+*/
 static int match_dev_by_label(struct device *dev, const void *data)
 {
 	struct block_device *bdev = dev_to_bdev(dev);
@@ -164,8 +179,10 @@ static int match_dev_by_label(struct device *dev, const void *data)
 
 	if (!bdev->bd_meta_info || strcmp(label, bdev->bd_meta_info->volname))
 		return 0;
+
 	return 1;
 }
+
 
 static dev_t devt_from_partlabel(const char *label)
 {
@@ -173,6 +190,7 @@ static dev_t devt_from_partlabel(const char *label)
 	dev_t devt = 0;
 
 	dev = class_find_device(&block_class, NULL, label, &match_dev_by_label);
+
 	if (dev) {
 		devt = dev->devt;
 		put_device(dev);
@@ -180,6 +198,7 @@ static dev_t devt_from_partlabel(const char *label)
 
 	return devt;
 }
+
 
 static dev_t devt_from_devname(const char *name)
 {
@@ -190,13 +209,16 @@ static dev_t devt_from_devname(const char *name)
 
 	if (strlen(name) > 31)
 		return 0;
+
 	strcpy(s, name);
+
 	for (p = s; *p; p++) {
 		if (*p == '/')
 			*p = '!';
 	}
 
 	devt = blk_lookup_devt(s, 0);
+
 	if (devt)
 		return devt;
 
@@ -206,6 +228,7 @@ static dev_t devt_from_devname(const char *name)
 	 */
 	while (p > s && isdigit(p[-1]))
 		p--;
+
 	if (p == s || !*p || *p == '0')
 		return 0;
 
@@ -213,13 +236,16 @@ static dev_t devt_from_devname(const char *name)
 	part = simple_strtoul(p, NULL, 10);
 	*p = '\0';
 	devt = blk_lookup_devt(s, part);
+
 	if (devt)
 		return devt;
 
 	/* try disk name without p<part number> */
 	if (p < s + 2 || !isdigit(p[-2]) || p[-1] != 'p')
 		return 0;
+
 	p[-1] = '\0';
+
 	return blk_lookup_devt(s, part);
 }
 #endif /* CONFIG_BLOCK */
@@ -233,10 +259,13 @@ static dev_t devt_from_devnum(const char *name)
 	if (sscanf(name, "%u:%u%c", &maj, &min, &dummy) == 2 ||
 	    sscanf(name, "%u:%u:%u:%c", &maj, &min, &offset, &dummy) == 3) {
 		devt = MKDEV(maj, min);
+
 		if (maj != MAJOR(devt) || min != MINOR(devt))
 			return 0;
+
 	} else {
 		devt = new_decode_dev(simple_strtoul(name, &p, 16));
+
 		if (*p)
 			return 0;
 	}
@@ -273,20 +302,25 @@ static dev_t devt_from_devnum(const char *name)
  *	block_class is used to check if something is a disk name. If the disk
  *	name contains slashes, the device name has them replaced with
  *	bangs.
- */
+*/
 dev_t name_to_dev_t(const char *name)
 {
 	if (strcmp(name, "/dev/nfs") == 0)
 		return Root_NFS;
+
 	if (strcmp(name, "/dev/cifs") == 0)
 		return Root_CIFS;
+
 	if (strcmp(name, "/dev/ram") == 0)
 		return Root_RAM0;
+
 #ifdef CONFIG_BLOCK
 	if (strncmp(name, "PARTUUID=", 9) == 0)
 		return devt_from_partuuid(name + 9);
+
 	if (strncmp(name, "PARTLABEL=", 10) == 0)
 		return devt_from_partlabel(name + 10);
+
 	if (strncmp(name, "/dev/", 5) == 0)
 		return devt_from_devname(name + 5);
 #endif
@@ -294,13 +328,16 @@ dev_t name_to_dev_t(const char *name)
 }
 EXPORT_SYMBOL_GPL(name_to_dev_t);
 
+
 static int __init root_dev_setup(char *line)
 {
 	strscpy(saved_root_name, line, sizeof(saved_root_name));
 	return 1;
 }
 
+
 __setup("root=", root_dev_setup);
+
 
 static int __init rootwait_setup(char *str)
 {
@@ -310,7 +347,9 @@ static int __init rootwait_setup(char *str)
 	return 1;
 }
 
+
 __setup("rootwait", rootwait_setup);
+
 
 static char * __initdata root_mount_data;
 static int __init root_data_setup(char *str)
@@ -319,12 +358,14 @@ static int __init root_data_setup(char *str)
 	return 1;
 }
 
+
 static char * __initdata root_fs_names;
 static int __init fs_names_setup(char *str)
 {
 	root_fs_names = str;
 	return 1;
 }
+
 
 static unsigned int __initdata root_delay;
 static int __init root_delay_setup(char *str)
@@ -333,9 +374,11 @@ static int __init root_delay_setup(char *str)
 	return 1;
 }
 
+
 __setup("rootflags=", root_data_setup);
 __setup("rootfstype=", fs_names_setup);
 __setup("rootdelay=", root_delay_setup);
+
 
 /* This can return zero length strings. Caller should check */
 static int __init split_fs_names(char *page, size_t size, char *names)
@@ -354,6 +397,7 @@ static int __init split_fs_names(char *page, size_t size, char *names)
 	return count;
 }
 
+
 static int __init do_mount_root(const char *name, const char *fs,
 				 const int flags, const void *data)
 {
@@ -365,9 +409,12 @@ static int __init do_mount_root(const char *name, const char *fs,
 	if (data) {
 		/* init_mount() requires a full page as fifth argument */
 		p = alloc_page(GFP_KERNEL);
+
 		if (!p)
 			return -ENOMEM;
+
 		data_page = page_address(p);
+
 		/* zero-pad. init_mount() will make sure it's terminated */
 		strncpy(data_page, data, PAGE_SIZE);
 	}
@@ -379,6 +426,7 @@ static int __init do_mount_root(const char *name, const char *fs,
 	init_chdir("/root");
 	s = current->fs->pwd.dentry->d_sb;
 	ROOT_DEV = s->s_dev;
+
 	printk(KERN_INFO
 	       "VFS: Mounted root (%s filesystem)%s on device %u:%u.\n",
 	       s->s_type->name,
@@ -388,8 +436,10 @@ static int __init do_mount_root(const char *name, const char *fs,
 out:
 	if (p)
 		put_page(p);
+
 	return ret;
 }
+
 
 void __init mount_block_root(char *name, int flags)
 {
@@ -401,29 +451,35 @@ void __init mount_block_root(char *name, int flags)
 
 	scnprintf(b, BDEVNAME_SIZE, "unknown-block(%u,%u)",
 		  MAJOR(ROOT_DEV), MINOR(ROOT_DEV));
+
 	if (root_fs_names)
 		num_fs = split_fs_names(fs_names, PAGE_SIZE, root_fs_names);
 	else
 		num_fs = list_bdev_fs_names(fs_names, PAGE_SIZE);
+
 retry:
-	for (i = 0, p = fs_names; i < num_fs; i++, p += strlen(p)+1) {
+	for (i = 0, p = fs_names; i < num_fs; i++, p += strlen(p) + 1) {
 		int err;
 
 		if (!*p)
 			continue;
+
 		err = do_mount_root(name, p, flags, root_mount_data);
+
 		switch (err) {
 			case 0:
 				goto out;
+
 			case -EACCES:
 			case -EINVAL:
 				continue;
 		}
-	        /*
+
+	    /*
 		 * Allow the user to distinguish between failed sys_open
 		 * and bad superblock on root device.
 		 * and give them a list of the available devices
-		 */
+		*/
 		printk("VFS: Cannot open root device \"%s\" or %s: error %d\n",
 				root_device_name, b, err);
 		printk("Please append a correct \"root=\" boot option; here are the available partitions:\n");
@@ -431,6 +487,7 @@ retry:
 		printk_all_partitions();
 		panic("VFS: Unable to mount root fs on %s", b);
 	}
+
 	if (!(flags & SB_RDONLY)) {
 		flags |= SB_RDONLY;
 		goto retry;
@@ -439,19 +496,24 @@ retry:
 	printk("List of all partitions:\n");
 	printk_all_partitions();
 	printk("No filesystem could mount root, tried: ");
+
 	for (i = 0, p = fs_names; i < num_fs; i++, p += strlen(p)+1)
 		printk(" %s", p);
+
 	printk("\n");
 	panic("VFS: Unable to mount root fs on %s", b);
+
 out:
 	put_page(page);
 }
  
+
 #ifdef CONFIG_ROOT_NFS
 
 #define NFSROOT_TIMEOUT_MIN	5
 #define NFSROOT_TIMEOUT_MAX	30
 #define NFSROOT_RETRY_MAX	5
+
 
 static int __init mount_nfs_root(void)
 {
@@ -467,19 +529,22 @@ static int __init mount_nfs_root(void)
 	 * The server or network may not be ready, so try several
 	 * times.  Stop after a few tries in case the client wants
 	 * to fall back to other boot methods.
-	 */
+	*/
 	timeout = NFSROOT_TIMEOUT_MIN;
 	for (try = 1; ; try++) {
 		err = do_mount_root(root_dev, "nfs",
 					root_mountflags, root_data);
+
 		if (err == 0)
 			return 1;
+
 		if (try > NFSROOT_RETRY_MAX)
 			break;
 
 		/* Wait, in case the server refused us immediately */
 		ssleep(timeout);
 		timeout <<= 1;
+
 		if (timeout > NFSROOT_TIMEOUT_MAX)
 			timeout = NFSROOT_TIMEOUT_MAX;
 	}
@@ -509,19 +574,24 @@ static int __init mount_cifs_root(void)
 	for (try = 1; ; try++) {
 		err = do_mount_root(root_dev, "cifs", root_mountflags,
 				    root_data);
+
 		if (err == 0)
 			return 1;
+
 		if (try > CIFSROOT_RETRY_MAX)
 			break;
 
 		ssleep(timeout);
 		timeout <<= 1;
+
 		if (timeout > CIFSROOT_TIMEOUT_MAX)
 			timeout = CIFSROOT_TIMEOUT_MAX;
 	}
+
 	return 0;
 }
 #endif
+
 
 static bool __init fs_is_nodev(char *fstype)
 {
@@ -536,6 +606,7 @@ static bool __init fs_is_nodev(char *fstype)
 	return ret;
 }
 
+
 static int __init mount_nodev_root(void)
 {
 	char *fs_names, *fstype;
@@ -543,25 +614,30 @@ static int __init mount_nodev_root(void)
 	int num_fs, i;
 
 	fs_names = (void *)__get_free_page(GFP_KERNEL);
+
 	if (!fs_names)
 		return -EINVAL;
+
 	num_fs = split_fs_names(fs_names, PAGE_SIZE, root_fs_names);
 
 	for (i = 0, fstype = fs_names; i < num_fs;
 	     i++, fstype += strlen(fstype) + 1) {
 		if (!*fstype)
 			continue;
+
 		if (!fs_is_nodev(fstype))
 			continue;
+
 		err = do_mount_root(root_device_name, fstype, root_mountflags,
 				    root_mount_data);
 		if (!err)
 			break;
 	}
 
-	free_page((unsigned long)fs_names);
+	free_page((unsigned long) fs_names);
 	return err;
 }
+
 
 void __init mount_root(void)
 {
@@ -569,13 +645,16 @@ void __init mount_root(void)
 	if (ROOT_DEV == Root_NFS) {
 		if (!mount_nfs_root())
 			printk(KERN_ERR "VFS: Unable to mount root fs via NFS.\n");
+
 		return;
 	}
+
 #endif
 #ifdef CONFIG_CIFS_ROOT
 	if (ROOT_DEV == Root_CIFS) {
 		if (!mount_cifs_root())
 			printk(KERN_ERR "VFS: Unable to mount root fs via SMB.\n");
+
 		return;
 	}
 #endif
@@ -589,14 +668,16 @@ void __init mount_root(void)
 
 		if (err < 0)
 			pr_emerg("Failed to create /dev/root: %d\n", err);
+
 		mount_block_root("/dev/root", root_mountflags);
 	}
 #endif
 }
 
+
 /*
  * Prepare the namespace - decide what/where to mount, load ramdisks, etc.
- */
+*/
 void __init prepare_namespace(void)
 {
 	if (root_delay) {
@@ -611,19 +692,22 @@ void __init prepare_namespace(void)
 	 * Note: this is a potential source of long boot delays.
 	 * For example, it is not atypical to wait 5 seconds here
 	 * for the touchpad of a laptop to initialize.
-	 */
+	*/
 	wait_for_device_probe();
 
 	md_run_setup();
 
 	if (saved_root_name[0]) {
 		root_device_name = saved_root_name;
+
 		if (!strncmp(root_device_name, "mtd", 3) ||
 		    !strncmp(root_device_name, "ubi", 3)) {
 			mount_block_root(root_device_name, root_mountflags);
 			goto out;
 		}
+
 		ROOT_DEV = name_to_dev_t(root_device_name);
+
 		if (strncmp(root_device_name, "/dev/", 5) == 0)
 			root_device_name += 5;
 	}
@@ -635,9 +719,11 @@ void __init prepare_namespace(void)
 	if ((ROOT_DEV == 0) && root_wait) {
 		printk(KERN_INFO "Waiting for root device %s...\n",
 			saved_root_name);
+
 		while (driver_probe_done() != 0 ||
 			(ROOT_DEV = name_to_dev_t(saved_root_name)) == 0)
 			msleep(5);
+
 		async_synchronize_full();
 	}
 
@@ -648,6 +734,7 @@ out:
 	init_chroot(".");
 }
 
+
 static bool is_tmpfs;
 static int rootfs_init_fs_context(struct fs_context *fc)
 {
@@ -657,11 +744,13 @@ static int rootfs_init_fs_context(struct fs_context *fc)
 	return ramfs_init_fs_context(fc);
 }
 
+
 struct file_system_type rootfs_fs_type = {
 	.name		= "rootfs",
 	.init_fs_context = rootfs_init_fs_context,
 	.kill_sb	= kill_litter_super,
 };
+
 
 void __init init_rootfs(void)
 {
